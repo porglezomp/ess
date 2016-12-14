@@ -14,6 +14,8 @@ pub enum Atom {
     Sym(String),
     /// A value representing a string literal.
     Str(String),
+    /// A value representing a single character.
+    Char(char),
     /// A value representing an integer. Any number containing no decimal point
     /// will be parsed as an `Int`.
     Int(i64),
@@ -59,7 +61,7 @@ named!(list<&str, Vec<Sexp> >,
   )
 );
 
-named!(atom<&str, Atom>, alt!(string | symbol | number));
+named!(atom<&str, Atom>, alt!(string | symbol | number | character));
 
 named!(string<&str, Atom>,
   do_parse!(
@@ -83,7 +85,7 @@ named!(symbol<&str, Atom>,
 
 fn valid_ident_prefix(ident: &str) -> IResult<&str, ()>  {
     match ident.chars().next() {
-        Some(c) if !c.is_digit(10) && valid_ident_char(c) =>
+        Some(c) if c != '#' && !c.is_digit(10) && valid_ident_char(c) =>
             IResult::Done(&ident[1..], ()),
         None => IResult::Incomplete(nom::Needed::Unknown),
         _ => IResult::Error(nom::ErrorKind::Custom(0)),
@@ -100,6 +102,15 @@ named!(number<&str, Atom>,
     integral: digit >>
     peek!(not!(valid_ident_prefix)) >>
     (Atom::Int(integral.chars().fold(0, |i, c| i * 10 + c as i64 - '0' as i64)))
+  )
+);
+
+named!(character<&str, Atom>,
+  do_parse!(
+    opt!(multispace) >>
+    tag_s!("#\\") >>
+    character: take_s!(1) >>
+    (Atom::Char(character.chars().next().unwrap()))
   )
 );
 
@@ -127,7 +138,21 @@ fn test_parse_ident() {
     assert_eq!(symbol(" ->socket"), IResult::Done("", Atom::Sym("->socket".into())));
     assert_eq!(symbol("fib("), IResult::Done("(", Atom::Sym("fib".into())));
 
+    // We reserve #foo for the implementation to do as it wishes
+    assert!(symbol("#hi").is_err());
+
     assert!(symbol("0").is_err());
     assert!(symbol("()").is_err());
     assert!(symbol("").is_incomplete());
+}
+
+#[cfg(test)]
+#[test]
+fn test_parse_char() {
+    assert_eq!(character("#\\\""), IResult::Done("", Atom::Char('"')));
+    assert_eq!(character("#\\ "), IResult::Done("", Atom::Char(' ')));
+    assert_eq!(character("  #\\\\"), IResult::Done("", Atom::Char('\\')));
+
+    assert!(character("#").is_incomplete());
+    assert!(character("a").is_err());
 }
