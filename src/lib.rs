@@ -37,7 +37,7 @@ pub enum Sexp {
 }
 
 pub fn parse(input: &str) -> Result<Sexp, ()> {
-    match sexp(input) {
+    match do_parse!(input, exp: sexp >> opt!(multispace) >> eof!() >> (exp)) {
         IResult::Done(_, res) => Ok(res),
         _ => Err(()),
     }
@@ -69,7 +69,6 @@ named!(string<&str, Atom>,
     tag_s!("\"") >>
     contents: take_until_s!("\"") >>
     tag_s!("\"") >>
-    opt!(multispace) >>
     (Atom::Str(contents.into()))
   )
 );
@@ -148,6 +147,17 @@ fn test_parse_ident() {
 
 #[cfg(test)]
 #[test]
+fn test_parse_string() {
+    assert_eq!(string(r#""hello""#), IResult::Done("", Atom::Str("hello".into())));
+    assert_eq!(string(r#"  "this is a nice string
+with 0123 things in it""#),
+               IResult::Done("", Atom::Str("this is a nice string\nwith 0123 things in it".into())));
+
+    assert!(string(r#""hi"#).is_err());
+}
+
+#[cfg(test)]
+#[test]
 fn test_parse_char() {
     assert_eq!(character("#\\\""), IResult::Done("", Atom::Char('"')));
     assert_eq!(character("#\\ "), IResult::Done("", Atom::Char(' ')));
@@ -155,4 +165,65 @@ fn test_parse_char() {
 
     assert!(character("#").is_incomplete());
     assert!(character("a").is_err());
+}
+
+#[cfg(test)]
+#[test]
+fn test_parse_list() {
+    assert_eq!(list("()"), IResult::Done("", vec![]));
+    assert_eq!(list("(1)"), IResult::Done("", vec![Sexp::Atom { atom: Atom::Int(1) }]));
+    assert_eq!(list("  ( 1    2  3 a )"), IResult::Done("", vec![
+        Sexp::Atom { atom: Atom::Int(1) },
+        Sexp::Atom { atom: Atom::Int(2) },
+        Sexp::Atom { atom: Atom::Int(3) },
+        Sexp::Atom { atom: Atom::Sym("a".into()) },
+    ]));
+}
+
+#[cfg(test)]
+#[test]
+fn test_cant_parse() {
+    assert!(parse("1 2").is_err());
+}
+
+#[cfg(test)]
+#[test]
+fn test_parse_expression() {
+    assert_eq!(parse(r#"
+(def (main)
+  (print (str "say " #\" "Hello, World" #\" " today!")))
+"#),
+               Ok(Sexp::List {
+                   list: vec![
+                       Sexp::Atom { atom: Atom::Sym("def".into()) },
+                       Sexp::List {
+                           list: vec![
+                               Sexp::Atom { atom: Atom::Sym("main".into()) }
+                           ]
+                       },
+                       Sexp::List {
+                           list: vec![
+                               Sexp::Atom { atom: Atom::Sym("print".into()) },
+                               Sexp::List {
+                                   list: vec![
+                                       Sexp::Atom {
+                                           atom: Atom::Sym("str".into())
+                                       },
+                                       Sexp::Atom {
+                                           atom: Atom::Str("say ".into())
+                                       },
+                                       Sexp::Atom { atom: Atom::Char('"') },
+                                       Sexp::Atom {
+                                           atom: Atom::Str("Hello, World".into())
+                                       },
+                                       Sexp::Atom { atom: Atom::Char('"') },
+                                       Sexp::Atom {
+                                           atom: Atom::Str(" today!".into())
+                                       }
+                                   ]
+                               }
+                           ]
+                       }
+                   ]
+               }));
 }
