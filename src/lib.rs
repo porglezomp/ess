@@ -46,15 +46,35 @@ pub enum Sexp {
     }
 }
 
-pub fn parse(input: &str) -> Result<Sexp, ParseError> {
-    match do_parse!(input, exp: sexp >> opt!(multispace) >> eof!() >> (exp)) {
+pub fn parse_one(input: &str) -> Result<Sexp, ParseError> {
+    match do_parse!(input,
+                    exp: sexp >>
+                    opt!(complete!(multispace)) >>
+                    eof!() >>
+                    (exp)) {
         IResult::Done(_, res) => Ok(res),
         _ => Err(ParseError::Unspecified),
     }
 }
 
+pub fn parse(input: &str) -> Result<Vec<Sexp>, ParseError> {
+    let parse_res: IResult<&str, Vec<Sexp>> =
+        do_parse!(input,
+                  exps: many1!(complete!(sexp)) >>
+                  opt!(complete!(multispace)) >>
+                  eof!() >>
+                  (exps));
+    match parse_res {
+        IResult::Done(_, res) => Ok(res),
+        e => {
+            println!("{:#?}", e);
+            Err(ParseError::Unspecified)
+        }
+    }
+}
+
 named!(sexp<&str, Sexp>,
-  alt!(
+  alt_complete!(
       list => { |list| Sexp::List { list: list } }
     | atom => { |atom| Sexp::Atom { atom: atom } }
   )
@@ -71,14 +91,14 @@ named!(list<&str, Vec<Sexp> >,
   )
 );
 
-named!(atom<&str, Atom>, alt!(string | symbol | number | character));
+named!(atom<&str, Atom>, alt_complete!(string | symbol | number | character));
 
 named!(string<&str, Atom>,
   do_parse!(
     opt!(multispace) >>
-    tag_s!("\"") >>
-    contents: take_until_s!("\"") >>
-    tag_s!("\"") >>
+    tag_s!(r#"""#) >>
+    contents: take_until_s!(r#"""#) >>
+    tag_s!(r#"""#) >>
     (Atom::Str(contents.into()))
   )
 );
@@ -117,7 +137,7 @@ named!(number<&str, Atom>,
 named!(character<&str, Atom>,
   do_parse!(
     opt!(multispace) >>
-    tag_s!("#\\") >>
+    tag_s!(r#"#\"#) >>
     character: take_s!(1) >>
     (Atom::Char(character.chars().next().unwrap()))
   )
@@ -169,9 +189,9 @@ with 0123 things in it""#),
 #[cfg(test)]
 #[test]
 fn test_parse_char() {
-    assert_eq!(character("#\\\""), IResult::Done("", Atom::Char('"')));
-    assert_eq!(character("#\\ "), IResult::Done("", Atom::Char(' ')));
-    assert_eq!(character("  #\\\\"), IResult::Done("", Atom::Char('\\')));
+    assert_eq!(character(r#"#\""#), IResult::Done("", Atom::Char('"')));
+    assert_eq!(character(r#"#\ "#), IResult::Done("", Atom::Char(' ')));
+    assert_eq!(character(r#"  #\\"#), IResult::Done("", Atom::Char('\\')));
 
     assert!(character("#").is_incomplete());
     assert!(character("a").is_err());
@@ -192,14 +212,14 @@ fn test_parse_list() {
 
 #[cfg(test)]
 #[test]
-fn test_cant_parse() {
-    assert!(parse("1 2").is_err());
+fn test_parse_only_one() {
+    assert!(parse_one("1 2").is_err());
 }
 
 #[cfg(test)]
 #[test]
 fn test_parse_expression() {
-    assert_eq!(parse(r#"
+    assert_eq!(parse_one(r#"
 (def (main)
   (print (str "say " #\" "Hello, World" #\" " today!")))
 "#),
@@ -236,4 +256,13 @@ fn test_parse_expression() {
                        }
                    ]
                }));
+}
+
+#[cfg(test)]
+#[test]
+fn test_parse_multi() {
+    assert_eq!(parse(" 1 2 3 "),
+               Ok(vec![Sexp::Atom { atom: Atom::Int(1) },
+                       Sexp::Atom { atom: Atom::Int(2) },
+                       Sexp::Atom { atom: Atom::Int(3) }]));
 }
