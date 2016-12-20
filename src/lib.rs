@@ -1,6 +1,6 @@
 //! A lightweight S-expression parser intended for language implementation.
 
-#![warn(missing_docs)]
+// #![warn(missing_docs)]
 #![deny(unsafe_code)]
 
 #[macro_use]
@@ -8,7 +8,15 @@ extern crate nom;
 
 use nom::{digit, multispace, IResult};
 
+/// Indicates how parsing failed.
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+pub enum ParseError {
+    /// We can't explain how the parsing failed.
+    Unspecified,
+}
+
 #[derive(Debug, PartialEq, Clone, PartialOrd)]
+/// An `Atom` is the representation of a non-composite object
 pub enum Atom {
     /// A value representing a symbol. A symbol is an atomic unit
     Sym(String),
@@ -25,6 +33,8 @@ pub enum Atom {
 }
 
 #[derive(Debug, PartialEq, Clone, PartialOrd)]
+/// A `Sexp` represents either an `Atom` or a `List`. It encompasses all
+/// possible lisp expressions.
 pub enum Sexp {
     /// A wrapper around the atom type
     Atom {
@@ -36,10 +46,10 @@ pub enum Sexp {
     }
 }
 
-pub fn parse(input: &str) -> Result<Sexp, ()> {
+pub fn parse(input: &str) -> Result<Sexp, ParseError> {
     match do_parse!(input, exp: sexp >> opt!(multispace) >> eof!() >> (exp)) {
         IResult::Done(_, res) => Ok(res),
-        _ => Err(()),
+        _ => Err(ParseError::Unspecified),
     }
 }
 
