@@ -7,6 +7,7 @@
 extern crate nom;
 
 use nom::{digit, multispace, IResult};
+use std::str::FromStr;
 
 /// Indicates how parsing failed.
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
@@ -113,11 +114,23 @@ fn valid_ident_char(c: char) -> bool {
 }
 
 named!(number<&str, Sexp>,
-  do_parse!(
-    opt!(multispace) >>
-    integral: digit >>
-    peek!(not!(valid_ident_prefix)) >>
-    (Sexp::Int(integral.chars().fold(0, |i, c| i * 10 + c as i64 - '0' as i64)))
+  preceded!(opt!(multispace),
+    map_res!(
+      recognize!(do_parse!(
+        digit >>
+        is_float: opt!(complete!(tag_s!("."))) >>
+        opt!(complete!(digit)) >>
+        peek!(not!(valid_ident_prefix)) >>
+        ()
+      )),
+      |text: &str| {
+          if text.contains(".") {
+              f64::from_str(text).map(Sexp::Float).or(Err(()))
+          } else {
+              i64::from_str(text).map(Sexp::Int).or(Err(()))
+          }
+      }
+    )
   )
 );
 
@@ -137,6 +150,11 @@ fn test_parse_number() {
     assert_eq!(number("123"), IResult::Done("", Sexp::Int(123)));
     assert_eq!(number("0123456789"), IResult::Done("", Sexp::Int(123456789)));
     assert_eq!(number("    42"), IResult::Done("", Sexp::Int(42)));
+
+    assert_eq!(number("4."), IResult::Done("", Sexp::Float(4.)));
+    assert_eq!(number("4.2"), IResult::Done("", Sexp::Float(4.2)));
+    assert_eq!(number("1.00000000001"),
+               IResult::Done("", Sexp::Float(1.00000000001)));
 
     assert!(number(" 42a").is_err());
     assert_eq!(number("13()"), IResult::Done("()", Sexp::Int(13)));
