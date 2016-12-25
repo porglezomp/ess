@@ -10,7 +10,7 @@ use std::borrow::Cow;
 /// purposes.
 #[derive(Debug, PartialEq, Clone, PartialOrd)]
 pub enum Sexp<'a, Loc=ByteSpan> where Loc: Span {
-    /// A value representing a symbol. A symbol is an atomic unit
+    /// A value representing a symbol.
     Sym(Cow<'a, str>, Loc),
     /// A value representing a string literal.
     Str(Cow<'a, str>, Loc),
@@ -19,10 +19,10 @@ pub enum Sexp<'a, Loc=ByteSpan> where Loc: Span {
     /// A value representing an integer. Any number containing no decimal point
     /// will be parsed as an `Int`.
     Int(i64, Loc),
-    /// A value representing a float. Any number containing a decimal point will
-    /// be parsed as a `Float`.
+    /// A value representing a floating point number. Any number containing a
+    /// decimal point will be parsed as a `Float`.
     Float(f64, Loc),
-    /// A list of subexpressions
+    /// A list of subexpressions.
     List(Vec<Sexp<'a, Loc>>, Loc),
 }
 
@@ -77,7 +77,8 @@ use ParseResult::*;
 pub enum ParseError<Loc=ByteSpan> where Loc: Span {
     /// We can't explain how the parsing failed.
     UnexpectedEof,
-    Number(Option<Box<ParseError>>, Loc),
+    Symbol(Box<ParseError>, Loc),
+    Number(Box<ParseError>, Loc),
     Unexpected(char, Loc::Begin),
     Unimplemented,
 }
@@ -133,7 +134,7 @@ pub fn parse_number(input: &str, start_loc: usize) -> ParseResult<Sexp, ParseErr
         pos
     } else {
         return Error(ParseError::Number(
-            Some(Box::new(ParseError::UnexpectedEof)),
+            Box::new(ParseError::UnexpectedEof),
             (input.len(), input.len()).offset(start_loc)));
     };
 
@@ -143,11 +144,11 @@ pub fn parse_number(input: &str, start_loc: usize) -> ParseResult<Sexp, ParseErr
     match input.chars().next() {
         Some(c) if !c.is_digit(10) => {
             return Error(ParseError::Number(
-                Some(Box::new(ParseError::Unexpected(c, 0))),
+                Box::new(ParseError::Unexpected(c, 0)),
                 (0, c.len_utf8()).offset(start_loc)));
         }
         None => return Error(ParseError::Number(
-            Some(Box::new(ParseError::UnexpectedEof)),
+            Box::new(ParseError::UnexpectedEof),
             (0, 0).offset(start_loc))),
         _ => (),
     }
@@ -170,7 +171,7 @@ pub fn parse_number(input: &str, start_loc: usize) -> ParseResult<Sexp, ParseErr
 
         if !c.is_digit(base) {
             return Error(ParseError::Number(
-                Some(Box::new(ParseError::Unexpected(c, i))),
+                Box::new(ParseError::Unexpected(c, i)),
                 (i, i).offset(start_loc)));
         }
 
@@ -193,7 +194,7 @@ pub fn parse_number(input: &str, start_loc: usize) -> ParseResult<Sexp, ParseErr
 
         if !c.is_digit(base) {
             return Error(ParseError::Number(
-                Some(Box::new(ParseError::Unexpected(c, i + end))),
+                Box::new(ParseError::Unexpected(c, i + end)),
                 (i+end, i+end).offset(start_loc)));
         }
     }
@@ -201,6 +202,42 @@ pub fn parse_number(input: &str, start_loc: usize) -> ParseResult<Sexp, ParseErr
     Done(&input[input.len()..],
          Sexp::Float(input.parse().expect("Already matched digits.digits"),
                      (0, input.len()).offset(start_loc)))
+}
+
+pub fn parse_symbol(input: &str, start_loc: usize) -> ParseResult<Sexp, ParseError> {
+    let end_of_white = if let Some(pos) = input.find(|c: char| !c.is_whitespace()) {
+        pos
+    } else {
+        return Error(ParseError::Symbol(
+            Box::new(ParseError::UnexpectedEof),
+            (input.len(), input.len()).offset(start_loc)));
+    };
+
+    let input = &input[end_of_white..];
+    let start_loc = start_loc + end_of_white;
+
+    match input.chars().next() {
+        Some(c@'#') | Some(c@':') | Some(c@'0'...'9') =>
+            return Error(ParseError::Symbol(
+                Box::new(ParseError::Unexpected(c, start_loc)),
+                (0, 0).offset(start_loc))),
+        Some(c) if c.is_delimiter() =>
+            return Error(ParseError::Symbol(
+                Box::new(ParseError::Unexpected(c, start_loc)),
+                (0, 0).offset(start_loc))),
+        Some(_) => (),
+        None => unreachable!(),
+    }
+
+    for (i, c) in input.char_indices() {
+        if c.is_delimiter() {
+            return Done(&input[i..],
+                        Sexp::Sym(input[..i].into(), (0, i).offset(start_loc)));
+        }
+    }
+
+    Done(&input[input.len()..],
+         Sexp::Sym(input.into(), (0, input.len()).offset(start_loc)))
 }
 
 
@@ -222,27 +259,31 @@ mod test {
         assert_eq!(parse_number("1()", 0), Done("()", Sexp::Int(1, (0, 1))));
         assert_eq!(parse_number("3.6()", 0), Done("()", Sexp::Float(3.6, (0, 3))));
 
-        assert_eq!(parse_number("", 0), Error(ParseError::Number(Some(Box::new(ParseError::UnexpectedEof)), (0, 0))));
-        assert_eq!(parse_number("123a", 0), Error(ParseError::Number(Some(Box::new(ParseError::Unexpected('a', 3))), (3, 3))));
-        assert_eq!(parse_number("66.6+", 0), Error(ParseError::Number(Some(Box::new(ParseError::Unexpected('+', 4))), (4, 4))));
+        assert_eq!(parse_number("", 0), Error(ParseError::Number(Box::new(ParseError::UnexpectedEof), (0, 0))));
+        assert_eq!(parse_number("123a", 0), Error(ParseError::Number(Box::new(ParseError::Unexpected('a', 3)), (3, 3))));
+        assert_eq!(parse_number("66.6+", 0), Error(ParseError::Number(Box::new(ParseError::Unexpected('+', 4)), (4, 4))));
+    }
+
+    #[test]
+    fn test_parse_ident() {
+        assert_eq!(parse_symbol("+", 0), Done("", Sexp::Sym("+".into(), (0, 1))));
+        assert_eq!(parse_symbol(" nil?", 0), Done("", Sexp::Sym("nil?".into(), (1, 5))));
+        assert_eq!(parse_symbol(" ->socket", 0), Done("", Sexp::Sym("->socket".into(), (1, 9))));
+        assert_eq!(parse_symbol("fib(", 0), Done("(", Sexp::Sym("fib".into(), (0, 3))));
+        assert_eq!(parse_symbol("foo2", 0), Done("", Sexp::Sym("foo2".into(), (0, 4))));
+
+        // We reserve #foo for the implementation to do as it wishes
+        assert_eq!(parse_symbol("#hi", 0), Error(ParseError::Symbol(Box::new(ParseError::Unexpected('#', 0)), (0, 0))));
+        // We reserve :foo for keywords
+        assert_eq!(parse_symbol(":hi", 0), Error(ParseError::Symbol(Box::new(ParseError::Unexpected(':', 0)), (0, 0))));
+
+        assert_eq!(parse_symbol("", 0), Error(ParseError::Symbol(Box::new(ParseError::UnexpectedEof), (0, 0))));
+        assert_eq!(parse_symbol("0", 0), Error(ParseError::Symbol(Box::new(ParseError::Unexpected('0', 0)), (0, 0))));
+        assert_eq!(parse_symbol("()", 0), Error(ParseError::Symbol(Box::new(ParseError::Unexpected('(', 0)), (0, 0))));
     }
 }
 
 // #[cfg(test)]
-// #[test]
-// fn test_parse_ident() {
-//     assert_eq!(symbol("+"), IResult::Done("", Sexp::Sym("+".into())));
-//     assert_eq!(symbol(" nil?"), IResult::Done("", Sexp::Sym("nil?".into())));
-//     assert_eq!(symbol(" ->socket"), IResult::Done("", Sexp::Sym("->socket".into())));
-//     assert_eq!(symbol("fib("), IResult::Done("(", Sexp::Sym("fib".into())));
-
-//     // We reserve #foo for the implementation to do as it wishes
-//     assert!(symbol("#hi").is_err());
-
-//     assert!(symbol("0").is_err());
-//     assert!(symbol("()").is_err());
-//     assert!(symbol("").is_incomplete());
-// }
 
 // #[cfg(test)]
 // #[test]
