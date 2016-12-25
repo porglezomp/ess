@@ -126,9 +126,27 @@ impl IsDelimeter for char {
 
 // Parsers /////////////////////////////////////////////////////////////////////
 
-// pub fn parse_one(input: &str) -> Result<Sexp, ParseError>;
+pub fn parse_sexp(input: &str, start_loc: usize) -> ParseResult<Sexp, ParseError> {
+    let end_of_white = if let Some(pos) = input.find(|c: char| !c.is_whitespace()) {
+        pos
+    } else {
+        return Error(ParseError::Number(
+            Box::new(ParseError::UnexpectedEof),
+            (input.len(), input.len()).offset(start_loc)));
+    };
 
-// pub fn parse(input: &str) -> Result<Vec<Sexp>, ParseError>;
+    let input = &input[end_of_white..];
+    let start_loc = start_loc + end_of_white;
+
+    match input.chars().next() {
+        Some('0'...'9') => parse_number(input, start_loc),
+        Some('(') => unimplemented!(),
+        Some('#') => parse_character(input, start_loc),
+        Some('"') => parse_string(input, start_loc),
+        Some(_) => parse_symbol(input, start_loc),
+        None => unreachable!(),
+    }
+}
 
 pub fn parse_number(input: &str, start_loc: usize) -> ParseResult<Sexp, ParseError> {
     // Consume all the whitespace at the beginning of the string
@@ -328,6 +346,15 @@ pub fn parse_character(input: &str, start_loc: usize) -> ParseResult<Sexp, Parse
 mod test {
     use super::*;
     use super::ParseResult::*;
+
+    #[test]
+    fn test_parse_sexp() {
+        assert_eq!(parse_sexp("	1", 0), Done("", Sexp::Int(1, (1, 2))));
+        assert_eq!(parse_sexp("2.2", 0), Done("", Sexp::Float(2.2, (0, 3))));
+        assert_eq!(parse_sexp(" a", 0), Done("", Sexp::Sym("a".into(), (1, 2))));
+        assert_eq!(parse_sexp("#\\c", 0), Done("", Sexp::Char('c', (0, 3))));
+        assert_eq!(parse_sexp(r#""hi""#, 0), Done("", Sexp::Str("hi".into(), (0, 4))));
+    }
 
     #[test]
     fn test_parse_number() {
