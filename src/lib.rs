@@ -77,6 +77,7 @@ use ParseResult::*;
 pub enum ParseError<Loc=ByteSpan> where Loc: Span {
     /// We can't explain how the parsing failed.
     UnexpectedEof,
+    Char(Box<ParseError>, Loc),
     String(Box<ParseError>, Loc),
     Symbol(Box<ParseError>, Loc),
     Number(Box<ParseError>, Loc),
@@ -274,6 +275,52 @@ pub fn parse_string(input: &str, start_loc: usize) -> ParseResult<Sexp, ParseErr
         (0, input.len()).offset(start_loc)))
 }
 
+pub fn parse_character(input: &str, start_loc: usize) -> ParseResult<Sexp, ParseError> {
+    let end_of_white = if let Some(pos) = input.find(|c: char| !c.is_whitespace()) {
+        pos
+    } else {
+        return Error(ParseError::String(
+            Box::new(ParseError::UnexpectedEof),
+            (input.len(), input.len()).offset(start_loc)));
+    };
+
+    let input = &input[end_of_white..];
+    let start_loc = start_loc + end_of_white;
+
+    match input.chars().nth(0) {
+        Some('#') => (),
+        Some(c) =>
+            return Error(ParseError::Char(
+                Box::new(ParseError::Unexpected(c, start_loc)),
+                (0, 0).offset(start_loc))),
+        None =>
+            return Error(ParseError::Char(
+                Box::new(ParseError::UnexpectedEof),
+                (0, 0).offset(start_loc))),
+    }
+
+    match input.chars().nth(1) {
+        Some('\\') => (),
+        Some(c) =>
+            return Error(ParseError::Char(
+                Box::new(ParseError::Unexpected(c, start_loc + 1)),
+                (1, 1).offset(start_loc))),
+        None =>
+            return Error(ParseError::Char(
+                Box::new(ParseError::UnexpectedEof),
+                (1, 1).offset(start_loc)))
+    }
+
+    match input.chars().nth(2) {
+        Some(c) =>
+            Done(&input[3..], Sexp::Char(c, (0, 3).offset(start_loc))),
+        None =>
+            Error(ParseError::Char(
+                Box::new(ParseError::UnexpectedEof),
+                (2, 2).offset(start_loc)))
+    }
+}
+
 
 // Tests ///////////////////////////////////////////////////////////////////////
 
@@ -325,18 +372,17 @@ with 0123 things in it""#, 0),
                    Done("", Sexp::Str("this is a nice string\nwith 0123 things in it".into(), (2, 48))));
         assert_eq!(parse_string(r#""hi"#, 0), Error(ParseError::String(Box::new(ParseError::UnexpectedEof), (0, 3))));
     }
+
+    #[test]
+    fn test_parse_char() {
+        assert_eq!(parse_character(r#"#\""#, 0), Done("", Sexp::Char('"', (0, 3))));
+        assert_eq!(parse_character(r#"#\ "#, 0), Done("", Sexp::Char(' ', (0, 3))));
+        assert_eq!(parse_character(r#"  #\\"#, 0), Done("", Sexp::Char('\\', (2, 5))));
+
+        assert_eq!(parse_character("#", 0), Error(ParseError::Char(Box::new(ParseError::UnexpectedEof), (1, 1))));
+        assert_eq!(parse_character("a", 0), Error(ParseError::Char(Box::new(ParseError::Unexpected('a', 0)), (0, 0))));
+    }
 }
-
-// #[cfg(test)]
-// #[test]
-// fn test_parse_char() {
-//     assert_eq!(character(r#"#\""#), IResult::Done("", Sexp::Char('"')));
-//     assert_eq!(character(r#"#\ "#), IResult::Done("", Sexp::Char(' ')));
-//     assert_eq!(character(r#"  #\\"#), IResult::Done("", Sexp::Char('\\')));
-
-//     assert!(character("#").is_incomplete());
-//     assert!(character("a").is_err());
-// }
 
 
 // #[cfg(test)]
