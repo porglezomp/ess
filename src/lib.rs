@@ -77,6 +77,7 @@ use ParseResult::*;
 pub enum ParseError<Loc=ByteSpan> where Loc: Span {
     /// We can't explain how the parsing failed.
     UnexpectedEof,
+    String(Box<ParseError>, Loc),
     Symbol(Box<ParseError>, Loc),
     Number(Box<ParseError>, Loc),
     Unexpected(char, Loc::Begin),
@@ -144,7 +145,7 @@ pub fn parse_number(input: &str, start_loc: usize) -> ParseResult<Sexp, ParseErr
     match input.chars().next() {
         Some(c) if !c.is_digit(10) => {
             return Error(ParseError::Number(
-                Box::new(ParseError::Unexpected(c, 0)),
+                Box::new(ParseError::Unexpected(c, start_loc)),
                 (0, c.len_utf8()).offset(start_loc)));
         }
         None => return Error(ParseError::Number(
@@ -171,7 +172,7 @@ pub fn parse_number(input: &str, start_loc: usize) -> ParseResult<Sexp, ParseErr
 
         if !c.is_digit(base) {
             return Error(ParseError::Number(
-                Box::new(ParseError::Unexpected(c, i)),
+                Box::new(ParseError::Unexpected(c, start_loc + i)),
                 (i, i).offset(start_loc)));
         }
 
@@ -194,7 +195,7 @@ pub fn parse_number(input: &str, start_loc: usize) -> ParseResult<Sexp, ParseErr
 
         if !c.is_digit(base) {
             return Error(ParseError::Number(
-                Box::new(ParseError::Unexpected(c, i + end)),
+                Box::new(ParseError::Unexpected(c, start_loc + i + end)),
                 (i+end, i+end).offset(start_loc)));
         }
     }
@@ -240,6 +241,39 @@ pub fn parse_symbol(input: &str, start_loc: usize) -> ParseResult<Sexp, ParseErr
          Sexp::Sym(input.into(), (0, input.len()).offset(start_loc)))
 }
 
+pub fn parse_string(input: &str, start_loc: usize) -> ParseResult<Sexp, ParseError> {
+    let end_of_white = if let Some(pos) = input.find(|c: char| !c.is_whitespace()) {
+        pos
+    } else {
+        return Error(ParseError::String(
+            Box::new(ParseError::UnexpectedEof),
+            (input.len(), input.len()).offset(start_loc)));
+    };
+
+    let input = &input[end_of_white..];
+    let start_loc = start_loc + end_of_white;
+
+    match input.chars().next() {
+        Some('"') => (),
+        Some(c) =>
+            return Error(ParseError::String(
+                Box::new(ParseError::Unexpected(c, start_loc)),
+            (0, 0).offset(start_loc))),
+        None => unreachable!(),
+    }
+
+    for (i, c) in input[1..].char_indices() {
+        if c == '"' {
+            return Done(&input[2+i..],
+            Sexp::Str(input[1..i+1].into(), (0, i+2).offset(start_loc)));
+        }
+    }
+
+    Error(ParseError::String(
+        Box::new(ParseError::UnexpectedEof),
+        (0, input.len()).offset(start_loc)))
+}
+
 
 // Tests ///////////////////////////////////////////////////////////////////////
 
@@ -281,20 +315,17 @@ mod test {
         assert_eq!(parse_symbol("0", 0), Error(ParseError::Symbol(Box::new(ParseError::Unexpected('0', 0)), (0, 0))));
         assert_eq!(parse_symbol("()", 0), Error(ParseError::Symbol(Box::new(ParseError::Unexpected('(', 0)), (0, 0))));
     }
+
+    #[test]
+    fn test_parse_string() {
+        assert_eq!(parse_string(r#""""#, 0), Done("", Sexp::Str("".into(), (0, 2))));
+        assert_eq!(parse_string(r#""hello""#, 0), Done("", Sexp::Str("hello".into(), (0, 7))));
+        assert_eq!(parse_string(r#"  "this is a nice string
+with 0123 things in it""#, 0),
+                   Done("", Sexp::Str("this is a nice string\nwith 0123 things in it".into(), (2, 48))));
+        assert_eq!(parse_string(r#""hi"#, 0), Error(ParseError::String(Box::new(ParseError::UnexpectedEof), (0, 3))));
+    }
 }
-
-// #[cfg(test)]
-
-// #[cfg(test)]
-// #[test]
-// fn test_parse_string() {
-//     assert_eq!(string(r#""hello""#), IResult::Done("", Sexp::Str("hello".into())));
-//     assert_eq!(string(r#"  "this is a nice string
-// with 0123 things in it""#),
-//                IResult::Done("", Sexp::Str("this is a nice string\nwith 0123 things in it".into())));
-
-//     assert!(string(r#""hi"#).is_err());
-// }
 
 // #[cfg(test)]
 // #[test]
