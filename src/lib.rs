@@ -137,7 +137,37 @@ macro_rules! consume_whitespace {
 }
 
 
-// Parsers /////////////////////////////////////////////////////////////////////
+// Top Level Parsers ///////////////////////////////////////////////////////////
+
+pub fn parse_one(input: &str) -> Result<(Sexp, &str), ParseError> {
+    match parse_sexp(input, 0) {
+        Done(rest, result) => Ok((result, rest)),
+        Error(err) => Err(err),
+    }
+}
+
+pub fn parse(mut input: &str) -> (Vec<Sexp>, Option<ParseError>) {
+    let mut start_loc = 0;
+    let mut results = Vec::new();
+    loop {
+        match parse_sexp(input, start_loc) {
+            Done(rest, result) => {
+                input = rest;
+                start_loc = result.get_loc().1;
+                results.push(result);
+                if rest.trim() == "" {
+                    return (results, None);
+                }
+            }
+            Error(err) => {
+                return (results, Some(err));
+            }
+        }
+    }
+}
+
+
+// Core Parsers ////////////////////////////////////////////////////////////////
 
 pub fn parse_sexp(input: &str, start_loc: usize) -> ParseResult<Sexp, ParseError> {
     let (input, start_loc) = consume_whitespace!(input, start_loc, ParseError::Sexp);
@@ -359,6 +389,21 @@ pub fn parse_character(input: &str, start_loc: usize) -> ParseResult<Sexp, Parse
 mod test {
     use super::*;
     use super::ParseResult::*;
+
+    #[test]
+    fn test_parse() {
+        assert_eq!(parse("1 2 3"), (vec![
+            Sexp::Int(1, (0, 1)), Sexp::Int(2, (2, 3)), Sexp::Int(3, (4, 5))
+        ], None));
+        assert_eq!(parse("1 2 )"), (vec![
+            Sexp::Int(1, (0, 1)), Sexp::Int(2, (2, 3))
+        ], Some(ParseError::Symbol(Box::new(ParseError::Unexpected(')', 4)), (4, 4)))));
+    }
+
+    #[test]
+    fn test_parse_one() {
+        assert_eq!(parse_one("1 2"), Ok((Sexp::Int(1, (0, 1)), " 2")));
+    }
 
     #[test]
     fn test_parse_sexp() {
