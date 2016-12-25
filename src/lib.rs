@@ -75,8 +75,8 @@ use ParseResult::*;
 /// Indicates how parsing failed.
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub enum ParseError<Loc=ByteSpan> where Loc: Span {
-    /// We can't explain how the parsing failed.
     UnexpectedEof,
+    List(Box<ParseError>, Loc),
     Sexp(Box<ParseError>, Loc),
     Char(Box<ParseError>, Loc),
     String(Box<ParseError>, Loc),
@@ -124,9 +124,6 @@ impl IsDelimeter for char {
     }
 }
 
-
-// Parsers /////////////////////////////////////////////////////////////////////
-
 macro_rules! consume_whitespace {
     ($input:expr, $start_loc:expr, $ErrorFn:expr) => {
         if let Some(pos) = $input.find(|c: char| !c.is_whitespace()) {
@@ -139,16 +136,65 @@ macro_rules! consume_whitespace {
     }
 }
 
+
+// Parsers /////////////////////////////////////////////////////////////////////
+
 pub fn parse_sexp(input: &str, start_loc: usize) -> ParseResult<Sexp, ParseError> {
     let (input, start_loc) = consume_whitespace!(input, start_loc, ParseError::Sexp);
 
     match input.chars().next() {
         Some('0'...'9') => parse_number(input, start_loc),
-        Some('(') => unimplemented!(),
+        Some('(') => parse_list(input, start_loc),
         Some('#') => parse_character(input, start_loc),
         Some('"') => parse_string(input, start_loc),
         Some(_) => parse_symbol(input, start_loc),
         None => unreachable!(),
+    }
+}
+
+pub fn parse_list(input: &str, start_loc: usize) -> ParseResult<Sexp, ParseError> {
+    let (input, start_loc) = consume_whitespace!(input, start_loc, ParseError::List);
+
+    match input.chars().nth(0) {
+        Some('(') => (),
+        Some(c) =>
+            return Error(ParseError::List(
+                Box::new(ParseError::Unexpected(c, 0)),
+                (0, 0).offset(start_loc))),
+        None => unreachable!(),
+    }
+
+    let mut input = &input[1..];
+    let mut loc = start_loc + 1;
+    let mut members = Vec::new();
+    println!("!{}", loc);
+    loop {
+        {
+            let (new_input, new_loc) = consume_whitespace!(input, loc, ParseError::List);
+            input = new_input;
+            loc = new_loc;
+            println!("{}", loc);
+        }
+
+        match input.chars().nth(0) {
+            Some(')') =>
+                return Done(&input[1..],
+                            Sexp::List(members, (start_loc, loc+1))),
+            Some(_) => (),
+            None => unreachable!(),
+        }
+
+        match parse_sexp(input, loc) {
+            Done(new_input, member) => {
+                loc = member.get_loc().1;
+                members.push(member);
+                input = new_input;
+            }
+            Error(err) =>
+                return Error(ParseError::List(
+                    Box::new(err),
+                    (0, 0).offset(loc)))
+        }
     }
 }
 
@@ -321,8 +367,26 @@ mod test {
         assert_eq!(parse_sexp(" a", 0), Done("", Sexp::Sym("a".into(), (1, 2))));
         assert_eq!(parse_sexp("#\\c", 0), Done("", Sexp::Char('c', (0, 3))));
         assert_eq!(parse_sexp(r#""hi""#, 0), Done("", Sexp::Str("hi".into(), (0, 4))));
+        assert_eq!(parse_sexp("()", 0), Done("", Sexp::List(vec![], (0, 2))));
+        assert_eq!(parse_sexp("( 1 2 3 )", 0), Done("", Sexp::List(vec![
+            Sexp::Int(1, (2, 3)),
+            Sexp::Int(2, (4, 5)),
+            Sexp::Int(3, (6, 7)),
+        ], (0, 9))));
 
         assert_eq!(parse_sexp("", 0), Error(ParseError::Sexp(Box::new(ParseError::UnexpectedEof), (0, 0))));
+    }
+
+    #[test]
+    fn test_parse_list() {
+        assert_eq!(parse_list("()", 0), Done("", Sexp::List(vec![], (0, 2))));
+        assert_eq!(parse_list("(1)", 0), Done("", Sexp::List(vec![Sexp::Int(1, (1, 2))], (0, 3))));
+        assert_eq!(parse_list("  ( 1    2  3 a )", 0), Done("", Sexp::List(vec![
+            Sexp::Int(1, (4, 5)),
+            Sexp::Int(2, (9, 10)),
+            Sexp::Int(3, (12, 13)),
+            Sexp::Sym("a".into(), (14, 15)),
+        ], (2, 17))));
     }
 
     #[test]
@@ -383,56 +447,3 @@ with 0123 things in it""#, 0),
         assert_eq!(parse_character("a", 0), Error(ParseError::Char(Box::new(ParseError::Unexpected('a', 0)), (0, 0))));
     }
 }
-
-
-// #[cfg(test)]
-// #[test]
-// fn test_parse_list() {
-//     assert_eq!(list("()"), IResult::Done("", vec![]));
-//     assert_eq!(list("(1)"), IResult::Done("", vec![Sexp::Int(1)]));
-//     assert_eq!(list("  ( 1    2  3 a )"), IResult::Done("", vec![
-//         Sexp::Int(1),
-//         Sexp::Int(2),
-//         Sexp::Int(3),
-//         Sexp::Sym("a".into()),
-//     ]));
-// }
-
-// #[cfg(test)]
-// #[test]
-// fn test_parse_only_one() {
-//     assert!(parse_one("1 2").is_err());
-// }
-
-// #[cfg(test)]
-// #[test]
-// fn test_parse_expression() {
-//     assert_eq!(parse_one(r#"
-// (def (main)
-//   (print (str "say " #\" "Hello, World" #\" " today!")))
-// "#),
-//                Ok(Sexp::List(vec![
-//                    Sexp::Sym("def".into()),
-//                    Sexp::List(
-//                        vec![Sexp::Sym("main".into())]
-//                    ),
-//                    Sexp::List(vec![
-//                        Sexp::Sym("print".into()),
-//                        Sexp::List(vec![
-//                            Sexp::Sym("str".into()),
-//                            Sexp::Str("say ".into()),
-//                            Sexp::Char('"'),
-//                            Sexp::Str("Hello, World".into()),
-//                            Sexp::Char('"'),
-//                            Sexp::Str(" today!".into()),
-//                        ])
-//                    ])
-//                ])));
-// }
-
-// #[cfg(test)]
-// #[test]
-// fn test_parse_multi() {
-//     assert_eq!(parse(" 1 2 3 "),
-//                Ok(vec![Sexp::Int(1), Sexp::Int(2), Sexp::Int(3)]));
-// }
