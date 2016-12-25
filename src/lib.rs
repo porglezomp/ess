@@ -29,23 +29,17 @@ pub enum Sexp<'a, Loc=ByteSpan> where Loc: Span {
 impl<'a, Loc> Sexp<'a, Loc> where Loc: Span {
     pub fn get_loc(&self) -> &Loc {
         match *self {
-            Sexp::Sym(.., ref l) => l,
-            Sexp::Str(.., ref l) => l,
-            Sexp::Char(.., ref l) => l,
-            Sexp::Int(.., ref l) => l,
-            Sexp::Float(.., ref l) => l,
-            Sexp::List(.., ref l) => l,
+            Sexp::Sym(.., ref l) | Sexp::Str(.., ref l) |
+            Sexp::Char(.., ref l) | Sexp::Int(.., ref l) |
+            Sexp::Float(.., ref l) | Sexp::List(.., ref l) => l,
         }
     }
 
     pub fn get_loc_mut(&mut self) -> &mut Loc {
         match *self {
-            Sexp::Sym(.., ref mut l) => l,
-            Sexp::Str(.., ref mut l) => l,
-            Sexp::Char(.., ref mut l) => l,
-            Sexp::Int(.., ref mut l) => l,
-            Sexp::Float(.., ref mut l) => l,
-            Sexp::List(.., ref mut l) => l,
+            Sexp::Sym(.., ref mut l) | Sexp::Str(.., ref mut l) |
+            Sexp::Char(.., ref mut l) | Sexp::Int(.., ref mut l) |
+            Sexp::Float(.., ref mut l) | Sexp::List(.., ref mut l) => l,
         }
     }
 }
@@ -402,30 +396,41 @@ mod test {
 
     #[test]
     fn test_parse_one() {
-        assert_eq!(parse_one("1 2"), Ok((Sexp::Int(1, (0, 1)), " 2")));
+        assert_eq!(parse_one("1 2"),
+                   Ok((Sexp::Int(1, (0, 1)), " 2")));
     }
 
     #[test]
     fn test_parse_sexp() {
-        assert_eq!(parse_sexp("	1", 0), Done("", Sexp::Int(1, (1, 2))));
-        assert_eq!(parse_sexp("2.2", 0), Done("", Sexp::Float(2.2, (0, 3))));
-        assert_eq!(parse_sexp(" a", 0), Done("", Sexp::Sym("a".into(), (1, 2))));
-        assert_eq!(parse_sexp("#\\c", 0), Done("", Sexp::Char('c', (0, 3))));
-        assert_eq!(parse_sexp(r#""hi""#, 0), Done("", Sexp::Str("hi".into(), (0, 4))));
-        assert_eq!(parse_sexp("()", 0), Done("", Sexp::List(vec![], (0, 2))));
-        assert_eq!(parse_sexp("( 1 2 3 )", 0), Done("", Sexp::List(vec![
+        assert_eq!(parse_sexp("	1", 0),
+                   Done("", Sexp::Int(1, (1, 2))));
+        assert_eq!(parse_sexp("2.2", 0),
+                   Done("", Sexp::Float(2.2, (0, 3))));
+        assert_eq!(parse_sexp(" a", 0),
+                   Done("", Sexp::Sym("a".into(), (1, 2))));
+        assert_eq!(parse_sexp("#\\c", 0),
+                   Done("", Sexp::Char('c', (0, 3))));
+        assert_eq!(parse_sexp(r#""hi""#, 0),
+                   Done("", Sexp::Str("hi".into(), (0, 4))));
+        assert_eq!(parse_sexp("()", 0),
+                   Done("", Sexp::List(vec![], (0, 2))));
+        assert_eq!(parse_sexp("( 1 2 3 )", 0),
+                   Done("", Sexp::List(vec![
             Sexp::Int(1, (2, 3)),
             Sexp::Int(2, (4, 5)),
             Sexp::Int(3, (6, 7)),
         ], (0, 9))));
 
-        assert_eq!(parse_sexp("", 0), Error(ParseError::Sexp(Box::new(ParseError::UnexpectedEof), (0, 0))));
+        assert_eq!(parse_sexp("", 0),
+                   Error(ParseError::Sexp(Box::new(ParseError::UnexpectedEof), (0, 0))));
     }
 
     #[test]
     fn test_parse_list() {
-        assert_eq!(parse_list("()", 0), Done("", Sexp::List(vec![], (0, 2))));
-        assert_eq!(parse_list("(1)", 0), Done("", Sexp::List(vec![Sexp::Int(1, (1, 2))], (0, 3))));
+        assert_eq!(parse_list("()", 0),
+                   Done("", Sexp::List(vec![], (0, 2))));
+        assert_eq!(parse_list("(1)", 0),
+                   Done("", Sexp::List(vec![Sexp::Int(1, (1, 2))], (0, 3))));
         assert_eq!(parse_list("  ( 1    2  3 a )", 0), Done("", Sexp::List(vec![
             Sexp::Int(1, (4, 5)),
             Sexp::Int(2, (9, 10)),
@@ -436,48 +441,73 @@ mod test {
 
     #[test]
     fn test_parse_number() {
-        assert_eq!(parse_number("1", 0), Done("", Sexp::Int(1, (0, 1))));
-        assert_eq!(parse_number(" 13", 0), Done("", Sexp::Int(13, (1, 3))));
-        assert_eq!(parse_number("1.2", 0), Done("", Sexp::Float(1.2, (0, 3))));
-        assert_eq!(parse_number("\u{3000}4.2", 0), Done("", Sexp::Float(4.2, (0, 3).offset('\u{3000}'.len_utf8()))));
-        assert_eq!(parse_number(" 	42 ", 0), Done(" ", Sexp::Int(42, (2, 4))));
-        assert_eq!(parse_number(" 4.2  ", 0), Done("  ", Sexp::Float(4.2, (1, 4))));
-        assert_eq!(parse_number("1()", 0), Done("()", Sexp::Int(1, (0, 1))));
-        assert_eq!(parse_number("3.6()", 0), Done("()", Sexp::Float(3.6, (0, 3))));
+        assert_eq!(parse_number("1", 0),
+                   Done("", Sexp::Int(1, (0, 1))));
+        assert_eq!(parse_number(" 13", 0),
+                   Done("", Sexp::Int(13, (1, 3))));
+        assert_eq!(parse_number("1.2", 0),
+                   Done("", Sexp::Float(1.2, (0, 3))));
+        assert_eq!(parse_number("\u{3000}4.2", 0),
+                   Done("", Sexp::Float(4.2, (0, 3).offset('\u{3000}'.len_utf8()))));
+        assert_eq!(parse_number(" 	42 ", 0),
+                   Done(" ", Sexp::Int(42, (2, 4))));
+        assert_eq!(parse_number(" 4.2  ", 0),
+                   Done("  ", Sexp::Float(4.2, (1, 4))));
+        assert_eq!(parse_number("1()", 0),
+                   Done("()", Sexp::Int(1, (0, 1))));
+        assert_eq!(parse_number("3.6()", 0),
+                   Done("()", Sexp::Float(3.6, (0, 3))));
 
-        assert_eq!(parse_number("", 0), Error(ParseError::Number(Box::new(ParseError::UnexpectedEof), (0, 0))));
-        assert_eq!(parse_number("123a", 0), Error(ParseError::Number(Box::new(ParseError::Unexpected('a', 3)), (3, 3))));
-        assert_eq!(parse_number("66.6+", 0), Error(ParseError::Number(Box::new(ParseError::Unexpected('+', 4)), (4, 4))));
+        assert_eq!(parse_number("", 0),
+                   Error(ParseError::Number(Box::new(ParseError::UnexpectedEof), (0, 0))));
+        assert_eq!(parse_number("123a", 0),
+                   Error(ParseError::Number(Box::new(ParseError::Unexpected('a', 3)), (3, 3))));
+        assert_eq!(parse_number("66.6+", 0),
+                   Error(ParseError::Number(Box::new(ParseError::Unexpected('+', 4)), (4, 4))));
     }
 
     #[test]
     fn test_parse_ident() {
-        assert_eq!(parse_symbol("+", 0), Done("", Sexp::Sym("+".into(), (0, 1))));
-        assert_eq!(parse_symbol(" nil?", 0), Done("", Sexp::Sym("nil?".into(), (1, 5))));
-        assert_eq!(parse_symbol(" ->socket", 0), Done("", Sexp::Sym("->socket".into(), (1, 9))));
-        assert_eq!(parse_symbol("fib(", 0), Done("(", Sexp::Sym("fib".into(), (0, 3))));
-        assert_eq!(parse_symbol("foo2", 0), Done("", Sexp::Sym("foo2".into(), (0, 4))));
+        assert_eq!(parse_symbol("+", 0),
+                   Done("", Sexp::Sym("+".into(), (0, 1))));
+        assert_eq!(parse_symbol(" nil?", 0),
+                   Done("", Sexp::Sym("nil?".into(), (1, 5))));
+        assert_eq!(parse_symbol(" ->socket", 0),
+                   Done("", Sexp::Sym("->socket".into(), (1, 9))));
+        assert_eq!(parse_symbol("fib(", 0),
+                   Done("(", Sexp::Sym("fib".into(), (0, 3))));
+        assert_eq!(parse_symbol("foo2", 0),
+                   Done("", Sexp::Sym("foo2".into(), (0, 4))));
 
         // We reserve #foo for the implementation to do as it wishes
-        assert_eq!(parse_symbol("#hi", 0), Error(ParseError::Symbol(Box::new(ParseError::Unexpected('#', 0)), (0, 0))));
+        assert_eq!(parse_symbol("#hi", 0),
+                   Error(ParseError::Symbol(Box::new(ParseError::Unexpected('#', 0)), (0, 0))));
         // We reserve :foo for keywords
-        assert_eq!(parse_symbol(":hi", 0), Error(ParseError::Symbol(Box::new(ParseError::Unexpected(':', 0)), (0, 0))));
+        assert_eq!(parse_symbol(":hi", 0),
+                   Error(ParseError::Symbol(Box::new(ParseError::Unexpected(':', 0)), (0, 0))));
 
-        assert_eq!(parse_symbol("", 0), Error(ParseError::Symbol(Box::new(ParseError::UnexpectedEof), (0, 0))));
-        assert_eq!(parse_symbol("0", 0), Error(ParseError::Symbol(Box::new(ParseError::Unexpected('0', 0)), (0, 0))));
-        assert_eq!(parse_symbol("()", 0), Error(ParseError::Symbol(Box::new(ParseError::Unexpected('(', 0)), (0, 0))));
+        assert_eq!(parse_symbol("", 0),
+                   Error(ParseError::Symbol(Box::new(ParseError::UnexpectedEof), (0, 0))));
+        assert_eq!(parse_symbol("0", 0),
+                   Error(ParseError::Symbol(Box::new(ParseError::Unexpected('0', 0)), (0, 0))));
+        assert_eq!(parse_symbol("()", 0),
+                   Error(ParseError::Symbol(Box::new(ParseError::Unexpected('(', 0)), (0, 0))));
     }
 
     #[test]
     fn test_parse_string() {
-        assert_eq!(parse_string(r#""""#, 0), Done("", Sexp::Str("".into(), (0, 2))));
-        assert_eq!(parse_string(r#""hello""#, 0), Done("", Sexp::Str("hello".into(), (0, 7))));
+        assert_eq!(parse_string(r#""""#, 0),
+                   Done("", Sexp::Str("".into(), (0, 2))));
+        assert_eq!(parse_string(r#""hello""#, 0),
+                   Done("", Sexp::Str("hello".into(), (0, 7))));
         assert_eq!(parse_string(r#"  "this is a nice string
 with 0123 things in it""#, 0),
                    Done("", Sexp::Str("this is a nice string\nwith 0123 things in it".into(), (2, 48))));
 
-        assert_eq!(parse_string("", 0), Error(ParseError::String(Box::new(ParseError::UnexpectedEof), (0, 0))));
-        assert_eq!(parse_string(r#""hi"#, 0), Error(ParseError::String(Box::new(ParseError::UnexpectedEof), (0, 3))));
+        assert_eq!(parse_string("", 0),
+                   Error(ParseError::String(Box::new(ParseError::UnexpectedEof), (0, 0))));
+        assert_eq!(parse_string(r#""hi"#, 0),
+                   Error(ParseError::String(Box::new(ParseError::UnexpectedEof), (0, 3))));
     }
 
     #[test]
@@ -486,9 +516,13 @@ with 0123 things in it""#, 0),
         assert_eq!(parse_character(r#"#\ "#, 0), Done("", Sexp::Char(' ', (0, 3))));
         assert_eq!(parse_character(r#"  #\\"#, 0), Done("", Sexp::Char('\\', (2, 5))));
 
-        assert_eq!(parse_character("", 0), Error(ParseError::Char(Box::new(ParseError::UnexpectedEof), (0, 0))));
-        assert_eq!(parse_character("#", 0), Error(ParseError::Char(Box::new(ParseError::UnexpectedEof), (1, 1))));
-        assert_eq!(parse_character("#\\", 0), Error(ParseError::Char(Box::new(ParseError::UnexpectedEof), (2, 2))));
-        assert_eq!(parse_character("a", 0), Error(ParseError::Char(Box::new(ParseError::Unexpected('a', 0)), (0, 0))));
+        assert_eq!(parse_character("", 0),
+                   Error(ParseError::Char(Box::new(ParseError::UnexpectedEof), (0, 0))));
+        assert_eq!(parse_character("#", 0),
+                   Error(ParseError::Char(Box::new(ParseError::UnexpectedEof), (1, 1))));
+        assert_eq!(parse_character("#\\", 0),
+                   Error(ParseError::Char(Box::new(ParseError::UnexpectedEof), (2, 2))));
+        assert_eq!(parse_character("a", 0),
+                   Error(ParseError::Char(Box::new(ParseError::Unexpected('a', 0)), (0, 0))));
     }
 }
