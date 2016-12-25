@@ -191,13 +191,11 @@ pub fn parse_list(input: &str, start_loc: usize) -> ParseResult<Sexp, ParseError
     let mut input = &input[1..];
     let mut loc = start_loc + 1;
     let mut members = Vec::new();
-    println!("!{}", loc);
     loop {
         {
             let (new_input, new_loc) = consume_whitespace!(input, loc, ParseError::List);
             input = new_input;
             loc = new_loc;
-            println!("{}", loc);
         }
 
         match input.chars().nth(0) {
