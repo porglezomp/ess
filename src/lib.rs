@@ -44,6 +44,27 @@ impl<'a, Loc> Sexp<'a, Loc> where Loc: Span {
     }
 }
 
+fn extend_cow<'a, T: ?Sized>(cow: &Cow<'a, T>) -> Cow<'static, T>
+    where T: ToOwned
+{
+    Cow::Owned(cow.clone().into_owned())
+}
+
+impl<'a, Loc> Sexp<'a, Loc> where Loc: Span + Clone {
+    pub fn to_owned(&self) -> Sexp<'static, Loc> {
+        match *self {
+            Sexp::Sym(ref s, ref l) => Sexp::Sym(extend_cow(s), l.clone()),
+            Sexp::Str(ref s, ref l) => Sexp::Str(extend_cow(s), l.clone()),
+            Sexp::Char(c, ref l) => Sexp::Char(c, l.clone()),
+            Sexp::Int(i, ref l) => Sexp::Int(i, l.clone()),
+            Sexp::Float(f, ref l) => Sexp::Float(f, l.clone()),
+            Sexp::List(ref xs, ref l) =>
+                Sexp::List(xs.iter().map(Sexp::to_owned).collect(),
+                           l.clone()),
+        }
+    }
+}
+
 
 // General Parsing Types ///////////////////////////////////////////////////////
 
