@@ -4,13 +4,23 @@ use span::{Span, ByteSpan};
 
 // Parsing Types ///////////////////////////////////////////////////////////////
 
+/// Represents what to do next in partially completed parsing.
+///
+/// `ParseResult` is returned from all intermediate parsers. If you just want to
+/// get back parsed S-expressions, you won't need to worry about this type since
+/// the top level parsers just return a `Result`.
+///
+/// If the parser failed to produce a result, it will return `Error`, and if it
+/// succeeded we'll get the `Done` variant containing the value produced and the
+/// rest of the text to work on.
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub enum ParseResult<'a, T, E> {
+    /// The parser succeeded, this contains first the un-consumed portion of the
+    /// input then the result produced by parsing.
     Done(&'a str, T),
+    /// The parser failed, the `E` represents the reason for the failure.
     Error(E),
 }
-
-use self::ParseResult::*;
 
 /// Indicates how parsing failed.
 #[derive(Debug, PartialEq, Eq, Clone)]
@@ -23,8 +33,8 @@ pub enum ParseError<Loc=ByteSpan> where Loc: Span {
     Symbol(Box<ParseError>, Loc),
     Number(Box<ParseError>, Loc),
     Unexpected(char, Loc::Begin),
-    Unimplemented,
 }
+use self::ParseResult::*;
 
 
 // Parsing Utilities ///////////////////////////////////////////////////////////
