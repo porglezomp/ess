@@ -4,6 +4,7 @@ version = "0.3.1"
 authors = ["Caleb Jones <code@calebjones.net>"]
 description = "An s-expression parser targeted at language implementation."
 repository = "https://github.com/porglezomp/ess"
+documentation = "https://docs.rs/ess"
 readme = "README.md"
 keywords = ["s-expression", "sexp", "s-exp", "parser"]
 license = "Zlib"
