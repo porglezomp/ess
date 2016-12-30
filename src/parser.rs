@@ -176,6 +176,10 @@ pub fn parse_one(input: &str) -> Result<(Sexp, &str), ParseError> {
 
 // Core Parsers ////////////////////////////////////////////////////////////////
 
+// TODO: All of these parsers deserve docs, but since they're somewhat internal
+// parsers, it's less critical than the rest of the API.
+
+#[allow(missing_docs)]
 pub fn parse_expression(input: &str, start_loc: usize) -> ParseResult<Sexp, ParseError> {
     let (input, start_loc) = consume_whitespace!(input, start_loc, ParseError::Sexp);
 
@@ -189,6 +193,7 @@ pub fn parse_expression(input: &str, start_loc: usize) -> ParseResult<Sexp, Pars
     }
 }
 
+#[allow(missing_docs)]
 pub fn parse_list(input: &str, start_loc: usize) -> ParseResult<Sexp, ParseError> {
     let (input, start_loc) = consume_whitespace!(input, start_loc, ParseError::List);
 
@@ -233,6 +238,7 @@ pub fn parse_list(input: &str, start_loc: usize) -> ParseResult<Sexp, ParseError
     }
 }
 
+#[allow(missing_docs)]
 pub fn parse_number(input: &str, start_loc: usize) -> ParseResult<Sexp, ParseError> {
     let (input, start_loc) = consume_whitespace!(input, start_loc, ParseError::Number);
 
@@ -299,6 +305,7 @@ pub fn parse_number(input: &str, start_loc: usize) -> ParseResult<Sexp, ParseErr
                      (0, input.len()).offset(start_loc)))
 }
 
+#[allow(missing_docs)]
 pub fn parse_symbol(input: &str, start_loc: usize) -> ParseResult<Sexp, ParseError> {
     let (input, start_loc) = consume_whitespace!(input, start_loc, ParseError::Symbol);
 
@@ -326,6 +333,7 @@ pub fn parse_symbol(input: &str, start_loc: usize) -> ParseResult<Sexp, ParseErr
          Sexp::Sym(input.into(), (0, input.len()).offset(start_loc)))
 }
 
+#[allow(missing_docs)]
 pub fn parse_string(input: &str, start_loc: usize) -> ParseResult<Sexp, ParseError> {
     let (input, start_loc) = consume_whitespace!(input, start_loc, ParseError::String);
 
@@ -350,6 +358,7 @@ pub fn parse_string(input: &str, start_loc: usize) -> ParseResult<Sexp, ParseErr
         (0, input.len()).offset(start_loc)))
 }
 
+#[allow(missing_docs)]
 pub fn parse_character(input: &str, start_loc: usize) -> ParseResult<Sexp, ParseError> {
     let (input, start_loc) = consume_whitespace!(input, start_loc, ParseError::Char);
 
