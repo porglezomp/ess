@@ -1,3 +1,17 @@
+//! Functions to parse s-expressions and expression atoms.
+//!
+//! This module contains the core parsing machinery.
+//!
+//! * If you're interested in getting a parsed s-expression that you can use,
+//!   then looking at [`parse`] and [`parse_one`] are your best bet.
+//! * If you want to write your own parsers that contain s-expressions,
+//!   [`ParseResult`] and [`parse_expression`] will be the most useful to you.
+//!
+//! [`parse`]: fn.parse.html
+//! [`parse_one`]: fn.parse_one.html
+//! [`ParseResult`]: enum.ParseResult.html
+//! [`parse_expression`]: fn.parse_expression.html
+
 use sexp::Sexp;
 use span::{Span, ByteSpan};
 
@@ -7,7 +21,7 @@ use span::{Span, ByteSpan};
 /// Represents what to do next in partially completed parsing.
 ///
 /// `ParseResult` is returned from all intermediate parsers. If you just want to
-/// get back parsed S-expressions, you won't need to worry about this type since
+/// get back parsed s-expressions, you won't need to worry about this type since
 /// the top level parsers just return a `Result`.
 ///
 /// If the parser failed to produce a result, it will return `Error`, and if it
@@ -92,13 +106,29 @@ macro_rules! consume_whitespace {
 
 // Top Level Parsers ///////////////////////////////////////////////////////////
 
-pub fn parse_one(input: &str) -> Result<(Sexp, &str), ParseError> {
-    match parse_expression(input, 0) {
-        Done(rest, result) => Ok((result, rest)),
-        Error(err) => Err(err),
-    }
-}
-
+/// Parse a sequence of s-expressions.
+///
+/// This function returns `(Vec<Sexp>, Option<ParseError>)` so that it can
+/// return partial results, for when some component parses successfully and a
+/// later part fails.
+///
+/// # Errors
+///
+/// If the text contains an invalid s-expression (imbalanced parenthesis,
+/// quotes, invalid numbers like 123q, etc.) then the parser will stop and
+/// return an error. Every s-expression before that point that successfully
+/// parsed will still be returned.
+///
+/// # Examples
+///
+/// We can get useful partial results
+///
+/// ```rust
+/// # use ess::parser::parse;
+/// let (exprs, err) = parse("1 2 3 ( 4");
+/// assert_eq!(exprs.len(), 3);
+/// assert!(err.is_some());
+/// ```
 pub fn parse(mut input: &str) -> (Vec<Sexp>, Option<ParseError>) {
     let mut start_loc = 0;
     let mut results = Vec::new();
@@ -116,6 +146,30 @@ pub fn parse(mut input: &str) -> (Vec<Sexp>, Option<ParseError>) {
                 return (results, Some(err));
             }
         }
+    }
+}
+
+/// Parses a single s-expression, ignoring any trailing text.
+///
+/// This function returns a pair of the parsed s-expression and the tail of the text.
+///
+/// # Errors
+///
+/// If the text begins with an invalid s-expression (imbalanced parenthesis,
+/// quotes, invalid numbers like 123q, etc.) then the parser will return an
+/// error. Any text after the first s-expression doesn't affect the parsing.
+///
+/// # Examples
+///
+/// ```rust
+/// # use ess::parser::parse_one;
+/// let (expr, rest) = parse_one("1 (").unwrap();
+/// assert_eq!(rest, " (");
+/// ```
+pub fn parse_one(input: &str) -> Result<(Sexp, &str), ParseError> {
+    match parse_expression(input, 0) {
+        Done(rest, result) => Ok((result, rest)),
+        Error(err) => Err(err),
     }
 }
 
