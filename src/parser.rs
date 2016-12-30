@@ -23,15 +23,38 @@ pub enum ParseResult<'a, T, E> {
 }
 
 /// Indicates how parsing failed.
+///
+/// Most `ParseError` variants contain a `Box<ParseError>` that represents the
+/// cause of that error. Using this, `ParseError` variants can be chained to
+/// produce a more complete picture of what exactly went wrong during parsing.
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub enum ParseError<Loc=ByteSpan> where Loc: Span {
+    /// Parsing reached the end of input where not expecting to, usually this
+    /// will be contained inside another `ParseError` like `String(box
+    /// UnexpectedEof, ...)` which indicates that the closing quote was never
+    /// found.
     UnexpectedEof,
+    /// Some problem occurred while parsing a list, along with the cause of that
+    /// error.
     List(Box<ParseError>, Loc),
+    /// Some problem occurred while parsing an s-expression. This will only be
+    /// generated if EOF is reached unexpectedly at the beginning of
+    /// `parse_expression`, so it should probably be removed.
     Sexp(Box<ParseError>, Loc),
+    /// Some problem occurred while parsing a character literal, along with the
+    /// cause of the error.
     Char(Box<ParseError>, Loc),
+    /// Some problem occurred while parsing a string literal, along with the
+    /// cause of the error.
     String(Box<ParseError>, Loc),
+    /// Some problem occurred while parsing a symbol, along with the cause of
+    /// the error.
     Symbol(Box<ParseError>, Loc),
+    /// Some problem occurred while parsing a number literal, along with the
+    /// cause of the error.
     Number(Box<ParseError>, Loc),
+    /// An unexpected character was found. This will usually be the root cause
+    /// in some chain of `ParseError`s.
     Unexpected(char, Loc::Begin),
 }
 use self::ParseResult::*;
