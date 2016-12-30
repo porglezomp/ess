@@ -1,10 +1,13 @@
+//! The `Sexp` type, the representation of s-expressions.
+
 use std::borrow::Cow;
 
 use span::{Span, ByteSpan};
 
-/// A type representing arbitrary symbolic expressions. `Sexp` carries the
-/// source code location it came from along with it for later diagnostic
-/// purposes.
+/// A type representing arbitrary s-expressions.
+///
+/// `Sexp` carries the source code location it came from along with it for later
+/// diagnostic purposes.
 #[derive(Debug, PartialEq, Clone, PartialOrd)]
 pub enum Sexp<'a, Loc=ByteSpan> where Loc: Span {
     /// A value representing a symbol.
@@ -24,6 +27,7 @@ pub enum Sexp<'a, Loc=ByteSpan> where Loc: Span {
 }
 
 impl<'a, Loc> Sexp<'a, Loc> where Loc: Span {
+    /// Gives a reference to the source location contained in the `Sexp`.
     pub fn get_loc(&self) -> &Loc {
         match *self {
             Sexp::Sym(.., ref l) | Sexp::Str(.., ref l) |
@@ -32,6 +36,7 @@ impl<'a, Loc> Sexp<'a, Loc> where Loc: Span {
         }
     }
 
+    /// Gives a mutable reference to the `Sexp`'s source location.
     pub fn get_loc_mut(&mut self) -> &mut Loc {
         match *self {
             Sexp::Sym(.., ref mut l) | Sexp::Str(.., ref mut l) |
@@ -48,6 +53,7 @@ fn extend_cow<'a, T: ?Sized>(cow: &Cow<'a, T>) -> Cow<'static, T>
 }
 
 impl<'a, Loc> Sexp<'a, Loc> where Loc: Span + Clone {
+    /// Take ownership of an s-expression's contents.
     pub fn to_owned(&self) -> Sexp<'static, Loc> {
         match *self {
             Sexp::Sym(ref s, ref l) => Sexp::Sym(extend_cow(s), l.clone()),

@@ -1,30 +1,77 @@
+//! Functions to parse s-expressions and expression atoms.
+//!
+//! This module contains the core parsing machinery.
+//!
+//! * If you're interested in getting a parsed s-expression that you can use,
+//!   then looking at [`parse`] and [`parse_one`] are your best bet.
+//! * If you want to write your own parsers that contain s-expressions,
+//!   [`ParseResult`] and [`parse_expression`] will be the most useful to you.
+//!
+//! [`parse`]: fn.parse.html
+//! [`parse_one`]: fn.parse_one.html
+//! [`ParseResult`]: enum.ParseResult.html
+//! [`parse_expression`]: fn.parse_expression.html
+
 use sexp::Sexp;
 use span::{Span, ByteSpan};
 
 
 // Parsing Types ///////////////////////////////////////////////////////////////
 
+/// Represents what to do next in partially completed parsing.
+///
+/// `ParseResult` is returned from all intermediate parsers. If you just want to
+/// get back parsed s-expressions, you won't need to worry about this type since
+/// the top level parsers just return a `Result`.
+///
+/// If the parser failed to produce a result, it will return `Error`, and if it
+/// succeeded we'll get the `Done` variant containing the value produced and the
+/// rest of the text to work on.
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub enum ParseResult<'a, T, E> {
+    /// The parser succeeded, this contains first the un-consumed portion of the
+    /// input then the result produced by parsing.
     Done(&'a str, T),
+    /// The parser failed, the `E` represents the reason for the failure.
     Error(E),
 }
 
-use self::ParseResult::*;
-
 /// Indicates how parsing failed.
+///
+/// Most `ParseError` variants contain a `Box<ParseError>` that represents the
+/// cause of that error. Using this, `ParseError` variants can be chained to
+/// produce a more complete picture of what exactly went wrong during parsing.
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub enum ParseError<Loc=ByteSpan> where Loc: Span {
+    /// Parsing reached the end of input where not expecting to, usually this
+    /// will be contained inside another `ParseError` like `String(box
+    /// UnexpectedEof, ...)` which indicates that the closing quote was never
+    /// found.
     UnexpectedEof,
+    /// Some problem occurred while parsing a list, along with the cause of that
+    /// error.
     List(Box<ParseError>, Loc),
+    /// Some problem occurred while parsing an s-expression. This will only be
+    /// generated if EOF is reached unexpectedly at the beginning of
+    /// `parse_expression`, so it should probably be removed.
     Sexp(Box<ParseError>, Loc),
+    /// Some problem occurred while parsing a character literal, along with the
+    /// cause of the error.
     Char(Box<ParseError>, Loc),
+    /// Some problem occurred while parsing a string literal, along with the
+    /// cause of the error.
     String(Box<ParseError>, Loc),
+    /// Some problem occurred while parsing a symbol, along with the cause of
+    /// the error.
     Symbol(Box<ParseError>, Loc),
+    /// Some problem occurred while parsing a number literal, along with the
+    /// cause of the error.
     Number(Box<ParseError>, Loc),
+    /// An unexpected character was found. This will usually be the root cause
+    /// in some chain of `ParseError`s.
     Unexpected(char, Loc::Begin),
-    Unimplemented,
 }
+use self::ParseResult::*;
 
 
 // Parsing Utilities ///////////////////////////////////////////////////////////
@@ -59,13 +106,29 @@ macro_rules! consume_whitespace {
 
 // Top Level Parsers ///////////////////////////////////////////////////////////
 
-pub fn parse_one(input: &str) -> Result<(Sexp, &str), ParseError> {
-    match parse_expression(input, 0) {
-        Done(rest, result) => Ok((result, rest)),
-        Error(err) => Err(err),
-    }
-}
-
+/// Parse a sequence of s-expressions.
+///
+/// This function returns `(Vec<Sexp>, Option<ParseError>)` so that it can
+/// return partial results, for when some component parses successfully and a
+/// later part fails.
+///
+/// # Errors
+///
+/// If the text contains an invalid s-expression (imbalanced parenthesis,
+/// quotes, invalid numbers like 123q, etc.) then the parser will stop and
+/// return an error. Every s-expression before that point that successfully
+/// parsed will still be returned.
+///
+/// # Examples
+///
+/// We can get useful partial results
+///
+/// ```rust
+/// # use ess::parser::parse;
+/// let (exprs, err) = parse("1 2 3 ( 4");
+/// assert_eq!(exprs.len(), 3);
+/// assert!(err.is_some());
+/// ```
 pub fn parse(mut input: &str) -> (Vec<Sexp>, Option<ParseError>) {
     let mut start_loc = 0;
     let mut results = Vec::new();
@@ -86,9 +149,37 @@ pub fn parse(mut input: &str) -> (Vec<Sexp>, Option<ParseError>) {
     }
 }
 
+/// Parses a single s-expression, ignoring any trailing text.
+///
+/// This function returns a pair of the parsed s-expression and the tail of the text.
+///
+/// # Errors
+///
+/// If the text begins with an invalid s-expression (imbalanced parenthesis,
+/// quotes, invalid numbers like 123q, etc.) then the parser will return an
+/// error. Any text after the first s-expression doesn't affect the parsing.
+///
+/// # Examples
+///
+/// ```rust
+/// # use ess::parser::parse_one;
+/// let (expr, rest) = parse_one("1 (").unwrap();
+/// assert_eq!(rest, " (");
+/// ```
+pub fn parse_one(input: &str) -> Result<(Sexp, &str), ParseError> {
+    match parse_expression(input, 0) {
+        Done(rest, result) => Ok((result, rest)),
+        Error(err) => Err(err),
+    }
+}
+
 
 // Core Parsers ////////////////////////////////////////////////////////////////
 
+// TODO: All of these parsers deserve docs, but since they're somewhat internal
+// parsers, it's less critical than the rest of the API.
+
+#[allow(missing_docs)]
 pub fn parse_expression(input: &str, start_loc: usize) -> ParseResult<Sexp, ParseError> {
     let (input, start_loc) = consume_whitespace!(input, start_loc, ParseError::Sexp);
 
@@ -102,6 +193,7 @@ pub fn parse_expression(input: &str, start_loc: usize) -> ParseResult<Sexp, Pars
     }
 }
 
+#[allow(missing_docs)]
 pub fn parse_list(input: &str, start_loc: usize) -> ParseResult<Sexp, ParseError> {
     let (input, start_loc) = consume_whitespace!(input, start_loc, ParseError::List);
 
@@ -146,6 +238,7 @@ pub fn parse_list(input: &str, start_loc: usize) -> ParseResult<Sexp, ParseError
     }
 }
 
+#[allow(missing_docs)]
 pub fn parse_number(input: &str, start_loc: usize) -> ParseResult<Sexp, ParseError> {
     let (input, start_loc) = consume_whitespace!(input, start_loc, ParseError::Number);
 
@@ -212,6 +305,7 @@ pub fn parse_number(input: &str, start_loc: usize) -> ParseResult<Sexp, ParseErr
                      (0, input.len()).offset(start_loc)))
 }
 
+#[allow(missing_docs)]
 pub fn parse_symbol(input: &str, start_loc: usize) -> ParseResult<Sexp, ParseError> {
     let (input, start_loc) = consume_whitespace!(input, start_loc, ParseError::Symbol);
 
@@ -239,6 +333,7 @@ pub fn parse_symbol(input: &str, start_loc: usize) -> ParseResult<Sexp, ParseErr
          Sexp::Sym(input.into(), (0, input.len()).offset(start_loc)))
 }
 
+#[allow(missing_docs)]
 pub fn parse_string(input: &str, start_loc: usize) -> ParseResult<Sexp, ParseError> {
     let (input, start_loc) = consume_whitespace!(input, start_loc, ParseError::String);
 
@@ -263,6 +358,7 @@ pub fn parse_string(input: &str, start_loc: usize) -> ParseResult<Sexp, ParseErr
         (0, input.len()).offset(start_loc)))
 }
 
+#[allow(missing_docs)]
 pub fn parse_character(input: &str, start_loc: usize) -> ParseResult<Sexp, ParseError> {
     let (input, start_loc) = consume_whitespace!(input, start_loc, ParseError::Char);
 

@@ -1,6 +1,6 @@
 //! A lightweight S-expression parser intended for language implementation.
 
-// #![warn(missing_docs)]
+#![warn(missing_docs)]
 #![deny(unsafe_code)]
 
 pub mod sexp;
