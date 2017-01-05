@@ -200,6 +200,19 @@ pub fn parse_expression(input: &str, start_loc: usize) -> ParseResult<Sexp, Pars
                 err => err,
             }
         }
+        Some('`') => {
+            match parse_expression(&input[1..], start_loc + 1) {
+                Done(rest, result) => {
+                    let span = *result.get_loc();
+                    let quote_span = (0, 1).offset(start_loc);
+                    Done(rest,
+                         Sexp::List(vec![Sexp::Sym("quasiquote".into(), quote_span),
+                                         result],
+                                    quote_span.union(&span)))
+                }
+                err => err,
+            }
+        }
         Some(_) => parse_symbol(input, start_loc),
         None => unreachable!(),
     }
@@ -480,7 +493,44 @@ mod test {
                            Sexp::Int(3, (7, 8)),
                        ], (2, 9)),
                    ], (0, 9))));
+
         assert_eq!(parse_expression("'", 0),
+                   Error(ParseError::Sexp(Box::new(ParseError::UnexpectedEof), (1, 1))));
+        assert_eq!(parse_expression("`'", 0),
+                   Error(ParseError::Sexp(Box::new(ParseError::UnexpectedEof), (2, 2))));
+    }
+
+    #[test]
+    fn test_parse_expr_quasiquote() {
+        assert_eq!(parse_expression("`a", 0),
+                   Done("", Sexp::List(vec![
+                       Sexp::Sym("quasiquote".into(), (0, 1)),
+                       Sexp::Sym("a".into(), (1, 2)),
+                   ], (0, 2))));
+        assert_eq!(parse_expression("`1", 0),
+                   Done("", Sexp::List(vec![
+                       Sexp::Sym("quasiquote".into(), (0, 1)),
+                       Sexp::Int(1, (1, 2)),
+                   ], (0, 2))));
+        assert_eq!(parse_expression("` (1 2 3)", 0),
+                   Done("", Sexp::List(vec![
+                       Sexp::Sym("quasiquote".into(), (0, 1)),
+                       Sexp::List(vec![
+                           Sexp::Int(1, (3, 4)),
+                           Sexp::Int(2, (5, 6)),
+                           Sexp::Int(3, (7, 8)),
+                       ], (2, 9)),
+                   ], (0, 9))));
+        assert_eq!(parse_expression("`'a", 0),
+                   Done("", Sexp::List(vec![
+                       Sexp::Sym("quasiquote".into(), (0, 1)),
+                       Sexp::List(vec![
+                           Sexp::Sym("quote".into(), (1, 2)),
+                           Sexp::Sym("a".into(), (2, 3)),
+                       ], (1, 3)),
+                   ], (0, 3))));
+
+        assert_eq!(parse_expression("`", 0),
                    Error(ParseError::Sexp(Box::new(ParseError::UnexpectedEof), (1, 1))));
     }
 
