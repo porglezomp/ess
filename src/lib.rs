@@ -3,9 +3,9 @@
 #![warn(missing_docs)]
 #![deny(unsafe_code)]
 
+pub mod parser;
 pub mod sexp;
 pub mod span;
-pub mod parser;
 
-pub use sexp::Sexp;
 pub use parser::{parse, parse_one};
+pub use sexp::Sexp;

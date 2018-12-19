@@ -45,8 +45,7 @@ impl Span for ByteSpan {
     }
 
     fn union(&self, other: &Self) -> Self {
-        use std::cmp::{min, max};
+        use std::cmp::{max, min};
         (min(self.0, other.0), max(self.1, other.1))
     }
 }
-
