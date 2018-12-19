@@ -83,18 +83,8 @@ trait IsDelimeter {
 
 impl IsDelimeter for char {
     fn is_delimiter(&self) -> bool {
-        self.is_whitespace()
-            || *self == ';'
-            || *self == '('
-            || *self == ')'
-            || *self == '['
-            || *self == ']'
-            || *self == '{'
-            || *self == '}'
-            || *self == '"'
-            || *self == '\''
-            || *self == '`'
-            || *self == ','
+        let delim_chars = r#";()[]{}"\`,"#;
+        self.is_whitespace() || delim_chars.contains(*self)
     }
 }
 
@@ -223,7 +213,7 @@ pub fn parse_expression(input: &str, start_loc: usize) -> ParseResult<Sexp, Pars
             err => err,
         },
         Some(',') => {
-            if input[1..].chars().next() == Some('@') {
+            if input[1..].starts_with('@') {
                 match parse_expression(&input[2..], start_loc + 2) {
                     Done(rest, result) => {
                         let span = *result.get_loc();
@@ -458,7 +448,7 @@ pub fn parse_string(input: &str, start_loc: usize) -> ParseResult<Sexp, ParseErr
         if c == '"' {
             return Done(
                 &input[2 + i..],
-                Sexp::Str(input[1..i + 1].into(), (0, i + 2).offset(start_loc)),
+                Sexp::Str(input[1..=i].into(), (0, i + 2).offset(start_loc)),
             );
         }
     }
