@@ -88,17 +88,41 @@ impl IsDelimeter for char {
     }
 }
 
-macro_rules! consume_whitespace {
-    ($input:expr, $start_loc:expr, $ErrorFn:expr) => {
-        if let Some(pos) = $input.find(|c: char| !c.is_whitespace()) {
-            (&$input[pos..], $start_loc + pos)
+fn consume_whitespace<'a>(input: &'a str, start_loc: usize) -> (&'a str, usize) {
+    let mut buffer = input;
+    let mut loc = start_loc;
+    while !buffer.is_empty() && (buffer.starts_with(char::is_whitespace) || buffer.starts_with(';'))
+    {
+        if let Some(pos) = buffer.find(|c: char| !c.is_whitespace()) {
+            buffer = &buffer[pos..];
+            loc += pos;
         } else {
-            return Error($ErrorFn(
-                Box::new(ParseError::UnexpectedEof),
-                ($input.len(), $input.len()).offset($start_loc),
-            ));
+            buffer = &buffer[buffer.len()..];
+            loc += buffer.len();
         }
-    };
+
+        if buffer.starts_with(';') {
+            if let Some(pos) = buffer.find('\n') {
+                buffer = &buffer[pos + 1..];
+                loc += pos + 1;
+            } else {
+                buffer = &buffer[buffer.len()..];
+                loc += buffer.len();
+            }
+        }
+    }
+    (&buffer, loc)
+}
+
+macro_rules! consume_whitespace {
+    ($input:expr, $start_loc:expr, $ErrorFn:expr) => {{
+        let (text, loc) = consume_whitespace($input, $start_loc);
+        if text.is_empty() {
+            return Error($ErrorFn(Box::new(ParseError::UnexpectedEof), (loc, loc)));
+        } else {
+            (text, loc)
+        }
+    }};
 }
 
 // Top Level Parsers ///////////////////////////////////////////////////////////
@@ -132,8 +156,9 @@ pub fn parse(mut input: &str) -> (Vec<Sexp>, Option<ParseError>) {
     loop {
         match parse_expression(input, start_loc) {
             Done(rest, result) => {
+                let (rest, loc) = consume_whitespace(rest, result.get_loc().1);
                 input = rest;
-                start_loc = result.get_loc().1;
+                start_loc = loc;
                 results.push(result);
                 if rest.trim() == "" {
                     return (results, None);
@@ -155,6 +180,7 @@ pub fn parse(mut input: &str) -> (Vec<Sexp>, Option<ParseError>) {
 /// If the text begins with an invalid s-expression (imbalanced parenthesis,
 /// quotes, invalid numbers like 123q, etc.) then the parser will return an
 /// error. Any text after the first s-expression doesn't affect the parsing.
+
 ///
 /// # Examples
 ///
@@ -1043,5 +1069,18 @@ with 0123 things in it""#,
                 (0, 0)
             ))
         );
+    }
+
+    #[test]
+    fn test_parse_comments() {
+        assert_eq!(
+            parse(
+                r#"(;hello
+    ;hi
+;hey ;how are you doing?
+) ;hi"#
+            ),
+            (vec![Sexp::List(vec![], (0, 42))], None)
+        )
     }
 }
