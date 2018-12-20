@@ -1,6 +1,6 @@
 [package]
 name = "ess"
-version = "0.4.1"
+version = "0.4.2"
 authors = ["C Jones <code@calebjones.net>"]
 description = "An s-expression parser targeted at language implementation."
 repository = "https://github.com/porglezomp/ess"
